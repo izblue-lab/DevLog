@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="1인 개발자 IZBLUE의 개인 기술 블로그이자 학습 가이드 지식 저장소">
+  <title>IZBLUE DevLog | 학습 지식 대시보드</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- JSON-LD Structured Data for Website Search (GEO) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "IZBLUE DevLog | 학습 지식 대시보드",
+    "description": "1인 개발자 IZBLUE가 공부하고 해결한 기술 이슈 및 가이드를 누적하는 지식 허브",
+    "publisher": {
+      "@type": "Organization",
+      "name": "IZBLUE DevLog"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: rgba(22, 28, 45, 0.6);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary-text: #f3f4f6;
+      --secondary-text: #9ca3af;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --accent-color: #6366f1;
+      --success-color: #10b981;
+      --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--primary-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 60px 20px;
+    }
+
+    /* Ambient Background Glows */
+    .glow-blob {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      filter: blur(140px);
+      z-index: -1;
+      opacity: 0.12;
+    }
+    .glow-1 {
+      top: -10%;
+      right: 15%;
+      background-color: #a855f7;
+    }
+    .glow-2 {
+      bottom: 10%;
+      left: 10%;
+      background-color: #6366f1;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* Header Styling */
+    header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .profile-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 30px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--primary-text);
+      margin-bottom: 20px;
+    }
+
+    .profile-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--success-color);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success-color);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(120deg, #ffffff 30%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }
+
+    header p {
+      color: var(--secondary-text);
+      font-size: 1.15rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Social Links */
+    .social-nav {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .social-btn {
+      color: var(--secondary-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.02);
+      transition: all 0.2s ease;
+    }
+
+    .social-btn:hover {
+      color: var(--primary-text);
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    /* Section Headings */
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 24px;
+      background: var(--accent-gradient);
+      border-radius: 4px;
+    }
+
+    /* Dashboard Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 50px;
+    }
+
+    @media (min-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .board-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: var(--shadow);
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .board-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+      border-color: rgba(99, 102, 241, 0.2);
+    }
+
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .card-desc {
+      color: var(--secondary-text);
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+      flex-grow: 1;
+    }
+
+    /* Article List in Card */
+    .article-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .article-item a {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--primary-text);
+      text-decoration: none;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .article-item a:hover {
+      border-color: var(--accent-color);
+      background: rgba(99, 102, 241, 0.05);
+      transform: translateX(4px);
+    }
+
+    .article-arrow {
+      color: var(--accent-color);
+      font-weight: bold;
+      transition: transform 0.2s ease;
+    }
+
+    .article-item a:hover .article-arrow {
+      transform: translateX(2px);
+    }
+
+    /* Placeholder Status */
+    .placeholder-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px dashed var(--border-color);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: var(--secondary-text);
+    }
+
+    .placeholder-badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 80px;
+      font-size: 0.85rem;
+      color: var(--secondary-text);
+      border-top: 1px solid var(--border-color);
+      padding-top: 30px;
+    }
+
+    footer a {
+      color: var(--accent-color);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Blobs -->
+  <div class="glow-blob glow-1"></div>
+  <div class="glow-blob glow-2"></div>
+
+  <div class="container">
+    
+    <header>
+      <div class="profile-badge">
+        <div class="profile-dot"></div>
+        <span>IZBLUE의 AI 1인 기업 개발 지식 저장소</span>
+      </div>
+      <h1>IZBLUE DevLog</h1>
+      <p>개발 공부와 실무 과정에서 삽질하며 알아낸 해결책과 핵심 기술 가이드들을 누적하는 대시보드입니다.</p>
+      
+      <div class="social-nav">
+        <a href="https://github.com" class="social-btn" target="_blank">GitHub</a>
+        <a href="https://threads.net" class="social-btn" target="_blank">Threads</a>
+        <a href="https://youtube.com" class="social-btn" target="_blank">YouTube</a>
+      </div>
+    </header>
+
+    <main>
+      <h2>Knowledge Dashboard</h2>
+      
+      <div class="dashboard-grid">
+        
+        <!-- Category 1: Local AI -->
+        <div class="board-card">
+          <div class="card-icon">🤖</div>
+          <div class="card-title">Local AI / Ollama</div>
+          <div class="card-desc">Ollama 및 로컬 AI를 개발 환경에 세팅하고 제어하는 실무 가이드 모음입니다.</div>
+          
+          <ul class="article-list">
+            <li class="article-item">
+              <a href="./Ollama_Easy_Guide.html">
+                <span>올라마 웹 브라우저 연동 및 CORS 해결 가이드</span>
+                <span class="article-arrow">➔</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Category 2 -->
+        <div class="board-card" style="justify-content: center; align-items: center; border-style: dashed; opacity: 0.5; min-height: 220px;">
+          <span style="font-size: 1.1rem; color: var(--secondary-text); font-weight: 500;">준비 중</span>
+        </div>
+
+        <!-- Category 3 -->
+        <div class="board-card" style="justify-content: center; align-items: center; border-style: dashed; opacity: 0.5; min-height: 220px;">
+          <span style="font-size: 1.1rem; color: var(--secondary-text); font-weight: 500;">준비 중</span>
+        </div>
+
+        <!-- Category 4 -->
+        <div class="board-card" style="justify-content: center; align-items: center; border-style: dashed; opacity: 0.5; min-height: 220px;">
+          <span style="font-size: 1.1rem; color: var(--secondary-text); font-weight: 500;">준비 중</span>
+        </div>
+
+      </div>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 <a href="https://github.com/izblue-lab" target="_blank" style="color: var(--accent-color); font-weight: 600; text-decoration: none;">IZBLUE</a> &amp; <a href="file:///Users/mac/.gemini/config/plugins/secretary/skills/kodari/SKILL.md">코다리 개발부장</a>. All rights reserved.</p>
+    </footer>
+  </div>
+
+</body>
+</html>
