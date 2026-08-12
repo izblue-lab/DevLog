@@ -28,7 +28,7 @@
         {
           "@type": "HowToStep",
           "name": "브라우저 보안 허용 및 새로고침",
-          "text": "주소창 왼쪽의 조절기(자물쇠) 아이콘을 클릭 ➔ '기기에 있는 앱' 설정을 허용(ON)으로 켠 뒤, 웹페이지를 새로고침(F5) 합니다."
+          "text": "주소창 왼쪽의 조절기(자물쇠) 아이콘을 클릭 ➔ '기기에 있는 앱' 설정을 허용(ON)으로 켠 뒤, 웹페이지를 새로고침(Cmd + R) 합니다."
         }
       ]
     },
@@ -502,7 +502,7 @@
         <div class="alert-box">
           <div class="alert-icon">⚠️</div>
           <div class="alert-content">
-            <strong>중요 단계:</strong> [기기에 있는 앱] 스위치를 켠 뒤에는 브라우저 화면을 <strong>반드시 새로고침(F5 또는 Cmd+R)</strong>해야 변경된 보안 설정이 정상 반영됩니다!
+            <strong>중요 단계:</strong> [기기에 있는 앱] 스위치를 켠 뒤에는 브라우저 화면을 <strong>반드시 새로고침(Cmd + R)</strong>해야 변경된 보안 설정이 정상 반영됩니다!
           </div>
         </div>
       </section>
@@ -525,7 +525,8 @@
               코드 복사
             </button>
           </div>
-          <pre><code id="plist-code">mkdir -p ~/Library/LaunchAgents && cat > ~/Library/LaunchAgents/com.ollama.origins.plist << 'EOF'
+          <pre><code id="plist-code">launchctl unload ~/Library/LaunchAgents/com.ollama.origins.plist 2>/dev/null
+mkdir -p ~/Library/LaunchAgents && cat > ~/Library/LaunchAgents/com.ollama.origins.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
