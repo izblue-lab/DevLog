@@ -7,3 +7,4 @@
 # Allow HTML files and .gitignore
 !*.html
 !.gitignore
+docs/
