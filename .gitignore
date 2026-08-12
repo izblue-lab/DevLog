@@ -1,0 +1,9 @@
+# Ignore everything by default
+*
+
+# Allow directories
+!*/
+
+# Allow HTML files and .gitignore
+!*.html
+!.gitignore
