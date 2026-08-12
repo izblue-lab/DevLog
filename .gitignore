@@ -1,10 +1,5 @@
-# Ignore everything by default
-*
-
-# Allow directories
-!*/
-
-# Allow HTML files and .gitignore
-!*.html
-!.gitignore
+# Ignore docs folder (contains markdown notes)
 docs/
+
+# Ignore OS metadata files
+.DS_Store
