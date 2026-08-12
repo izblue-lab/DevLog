@@ -405,6 +405,23 @@
     footer a:hover {
       text-decoration: underline;
     }
+
+    .back-home-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--secondary-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 24px;
+      transition: all 0.2s ease;
+    }
+
+    .back-home-btn:hover {
+      color: var(--primary-text);
+      transform: translateX(-4px);
+    }
   </style>
 </head>
 <body>
@@ -415,6 +432,11 @@
 
   <div class="container">
     
+    <a href="./index.html" class="back-home-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      대시보드로 돌아가기
+    </a>
+
     <header>
       <div class="badge">Ollama Integration</div>
       <h1>로컬 AI 웹 브라우저 연동 가이드</h1>
