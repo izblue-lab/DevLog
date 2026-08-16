@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="30B 이상 로컬 AI 및 Ollama 구동 시 발생하는 문장 무한 반복 루프 현상의 원인과 4가지 근본 해결책, 검수 게이트 설계 실무 가이드">
+  <title>로컬 AI 문장 반복 루프 근본 해결 가이드</title>
+  
+  <!-- JSON-LD Structured Data for AI Search Engines (GEO) -->
+  <script type="application/ld+json">
+  [
+    {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      "name": "로컬 AI 문장 무한 반복 루프 근본 해결 4단계 가이드",
+      "description": "30B 이상 고파라미터 모델 및 긴 컨텍스트 생성 시 발생하는 도돌이표 문장 반복을 완벽히 차단하는 실무 파라미터 최적화 가이드",
+      "step": [
+        {
+          "@type": "HowToStep",
+          "name": "샘플링 파라미터 최적화",
+          "text": "repeat_penalty를 1.18로 상향하고 repeat_last_n을 128로 확장하여 중복 토큰 확률을 사전 억제합니다."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "양자화(Quantization) 품질 확보",
+          "text": "가중치 손실로 인한 주의집중 왜곡을 막기 위해 최소 Q4_K_M 이상의 버전을 사용합니다."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "프롬프트 단계 분할 (Chunking)",
+          "text": "2,000자 이상 장문을 한 번에 생성하지 않고 개요, 본문, 결론 단계로 쪼개어 호출합니다."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Stop Sequence 종료 마커 등록",
+          "text": "###END### 등 종료 마커를 지정하여 생성이 끝난 후 모델이 헛돌지 않도록 물리적으로 차단합니다."
+        }
+      ]
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "왜 로컬 AI가 같은 문장을 계속 반복(루프)하나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "AI가 이전 토큰을 기반으로 다음 토큰을 예측할 때, 특정 패턴이 한 번 등장하면 '이 단어 뒤에는 또 이 단어가 올 확률이 높다'고 판단하여 스스로 확률에 갇히는 자기 강화 피드백(Attractor) 현상 때문입니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "검수 게이트(Validation Gate)만 붙이면 해결되지 않나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "검수 게이트는 결과물을 거르는 사후 안전망일 뿐입니다. repeat_penalty 파라미터 최적화와 프롬프트 단계 분할을 적용하면 게이트 없이도 루프의 95% 이상을 사전 예방할 수 있습니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "repeat_penalty 값을 너무 높이면 어떻게 되나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "1.3 이상으로 너무 높이면 같은 단어나 조사를 아예 안 쓰려고 억지스러운 동의어나 어색한 단어를 선택하므로 1.15~1.25(1.18 베스트)를 권장합니다."
+          }
+        }
+      ]
+    }
+  ]
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Modern Reset & Colors */
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: rgba(22, 28, 45, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary-text: #f3f4f6;
+      --secondary-text: #9ca3af;
+      --accent-gradient: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #6366f1 100%);
+      --accent-color: #a855f7;
+      --success-color: #10b981;
+      --warning-color: #f59e0b;
+      --cyan-color: #06b6d4;
+      --code-bg: #111827;
+      --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--primary-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 40px 20px;
+    }
+
+    /* Ambient Background Glows */
+    .glow-blob {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      filter: blur(120px);
+      z-index: -1;
+      opacity: 0.15;
+    }
+    .glow-1 {
+      top: 10%;
+      left: 10%;
+      background-color: #a855f7;
+    }
+    .glow-2 {
+      bottom: 20%;
+      right: 10%;
+      background-color: #6366f1;
+    }
+
+    /* Container & Layout */
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* Top Nav */
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-color);
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+    .back-btn:hover {
+      opacity: 0.8;
+    }
+
+    .category-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #c084fc;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 45px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: var(--accent-gradient);
+      border-radius: 30px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.3rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(120deg, #ffffff 40%, #f3e8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+      line-height: 1.25;
+    }
+
+    header p {
+      color: var(--secondary-text);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Cards & Panels */
+    section {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 35px;
+      margin-bottom: 30px;
+      box-shadow: var(--shadow);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    section:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+      border-color: rgba(168, 85, 247, 0.2);
+    }
+
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 24px;
+      background: var(--accent-gradient);
+      border-radius: 4px;
+    }
+
+    p.section-desc {
+      color: var(--secondary-text);
+      margin-bottom: 22px;
+      font-size: 0.95rem;
+    }
+
+    /* Steps Grid */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .steps-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .step-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 22px;
+      text-align: left;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .step-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(168, 85, 247, 0.3);
+    }
+
+    .step-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      background: var(--accent-gradient);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3);
+    }
+
+    .step-tag {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e9d5ff;
+    }
+
+    .step-title {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 8px;
+      color: #f3f4f6;
+    }
+
+    .step-desc {
+      font-size: 0.85rem;
+      color: var(--secondary-text);
+      line-height: 1.55;
+    }
+
+    /* Notice Alert */
+    .alert-box {
+      background: rgba(168, 85, 247, 0.1);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .alert-icon {
+      font-size: 1.3rem;
+      line-height: 1;
+    }
+
+    .alert-content {
+      font-size: 0.88rem;
+      color: #e9d5ff;
+      line-height: 1.55;
+    }
+
+    /* Code Blocks styling */
+    .code-wrapper {
+      position: relative;
+      margin-top: 16px;
+      margin-bottom: 16px;
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.8rem;
+      color: var(--secondary-text);
+      font-family: 'Fira Code', monospace;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--primary-text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+    }
+
+    .copy-btn.copied {
+      background: var(--success-color);
+      border-color: var(--success-color);
+    }
+
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: #f3f4f6;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: #f472b6;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* FAQ Accordion */
+    .faq-item {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.2s ease;
+    }
+
+    .faq-item:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .faq-trigger {
+      width: 100%;
+      text-align: left;
+      padding: 16px 20px;
+      background: none;
+      border: none;
+      color: var(--primary-text);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .faq-trigger::after {
+      content: '+';
+      font-size: 1.2rem;
+      font-weight: 400;
+      color: var(--secondary-text);
+      transition: transform 0.3s ease;
+    }
+
+    .faq-item.active .faq-trigger::after {
+      content: '−';
+    }
+
+    .faq-content {
+      padding: 0 20px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+      color: var(--secondary-text);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .faq-item.active .faq-content {
+      padding: 0 20px 18px 20px;
+      max-height: 300px;
+    }
+
+    /* Comparison Table */
+    .table-container {
+      overflow-x: auto;
+      margin-top: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      color: #d8b4fe;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--secondary-text);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .back-home-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--secondary-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 24px;
+      transition: all 0.2s ease;
+    }
+
+    .back-home-btn:hover {
+      color: var(--primary-text);
+      transform: translateX(-4px);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 25px;
+      border-top: 1px solid var(--border-color);
+      color: var(--secondary-text);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-blob glow-1"></div>
+  <div class="glow-blob glow-2"></div>
+
+  <div class="container">
+    <!-- Top Navigation -->
+    <a href="./index.html" class="back-home-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      대시보드로 돌아가기
+    </a>
+
+    <header>
+      <div class="badge">Performance &amp; Quality</div>
+      <h1>로컬 AI 문장 반복 루프<br>근본 해결 가이드</h1>
+      <p>30B 이상 대형 모델에서 생기는 '도돌이표 무한 반복' 원인과 4가지 근본 해결책</p>
+    </header>
+
+    <main>
+      <!-- Core Takeaway Banner -->
+      <section id="summary" style="border-left: 4px solid var(--accent-color);">
+        <h2 style="font-size: 1.25rem;">핵심 요약 (한 줄 결론)</h2>
+        <p style="font-size: 0.95rem; color: #f3f4f6; line-height: 1.6;">
+          검수 게이트(Guardrail)는 사후에 불량 텍스트를 걸러내는 <strong>'최후의 안전망'</strong>일 뿐입니다.<br>
+          <strong>샘플링 파라미터(<code>repeat_penalty</code>) 최적화</strong>와 <strong>프롬프트 단계 분할(Chunking)</strong>만 적용해도 루프의 95% 이상을 사전 차단할 수 있습니다.
+        </p>
+      </section>
+
+      <!-- Section 1: Root Cause & Analogy -->
+      <section id="cause">
+        <h2>1. 왜 로컬 AI가 같은 문장을 계속 반복할까요?</h2>
+        <p class="section-desc">AI가 문장 중간에 갇혀 도돌이표를 도는 이유를 직관적으로 이해해 봅니다.</p>
+
+        <div class="alert-box">
+          <div class="alert-icon">🚗</div>
+          <div class="alert-content">
+            <strong>"도돌이표 내비게이션" 비유로 이해하기</strong><br>
+            AI가 글을 쓰는 과정은 <strong>내비게이션이 앞길을 예측하며 길을 찾는 것</strong>과 같습니다.<br>
+            1. AI는 자기가 방금 쓴 단어들을 보면서 다음에 올 가장 어울리는 단어를 확률적으로 고릅니다.<br>
+            2. 그런데 글이 길어지거나 특정 단어가 한 번 반복되면, AI 두뇌가 <em>"어? 방금 이 단어를 썼으니 또 쓰는 게 가장 자연스럽겠네!"</em>라는 착각(자기 강화 피드백)에 빠집니다.<br>
+            3. 결국 로터리에서 빠져나오지 못하고 계속 같은 자리만 빙빙 도는 <strong>'도돌이표 무한 루프'</strong>에 갇히게 됩니다.
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: 4 Root Cause Solutions -->
+      <section id="solutions">
+        <h2>2. 반복 루프를 뿌리 뽑는 4가지 근본 해결책</h2>
+        <p class="section-desc">게이트 없이도 결과물을 무결점으로 만드는 4단계 사전 방어선입니다.</p>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-header-row">
+              <div class="step-num">1</div>
+              <span class="step-tag" style="color: #fcd34d;">가장 즉각적 효과</span>
+            </div>
+            <div class="step-title">샘플링 파라미터 최적화</div>
+            <div class="step-desc">
+              <code>repeat_penalty</code>를 <strong>1.15~1.25</strong>로 상향하고, 감시 범위인 <code>repeat_last_n</code>을 <strong>128</strong>로 넓혀 방금 쓴 단어에 확률적 벌점을 부여합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-header-row">
+              <div class="step-num">2</div>
+              <span class="step-tag" style="color: #67e8f9;">신경망 왜곡 방지</span>
+            </div>
+            <div class="step-title">양자화 품질 확보</div>
+            <div class="step-desc">
+              VRAM을 아끼려고 Q2, Q3 등 과도한 저비트 압축 모델을 쓰면 주의집중 가중치가 왜곡됩니다. 최소 <strong>Q4_K_M</strong> 또는 <strong>Q5_K_M</strong>을 권장합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-header-row">
+              <div class="step-num">3</div>
+              <span class="step-tag" style="color: #86efac;">챕터별 글쓰기</span>
+            </div>
+            <div class="step-title">프롬프트 단계 분할 (Chunking)</div>
+            <div class="step-desc">
+              2,000자 장문을 단숨에 뽑지 않고, <strong>[1단계 개요/목차 ➔ 2단계 섹션별 본문 ➔ 3단계 결론]</strong>처럼 단계별로 쪼개어 호출해 컨텍스트 오염을 차단합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-header-row">
+              <div class="step-num">4</div>
+              <span class="step-tag" style="color: #fca5a5;">물리적 강제 차단</span>
+            </div>
+            <div class="step-title">Stop Sequence 등록</div>
+            <div class="step-desc">
+              할 말이 다 끝났는데도 AI가 헛돌지 않도록, <code>stop: ["###END###", "\n\n\n\n"]</code>를 등록해 글이 끝나는 즉시 물리적으로 연산을 중단시킵니다.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Ready-to-use Parameter Code -->
+      <section id="code-sample">
+        <h2>3. 바로 복사해서 쓰는 Ollama 파라미터 최적 옵션</h2>
+        <p class="section-desc">Ollama API 호출 시 <code>options</code> 필드에 그대로 복사하여 전달하세요.</p>
+
+        <div class="code-wrapper">
+          <div class="code-header">
+            <span>JSON / Ollama API Request</span>
+            <button class="copy-btn" onclick="copyCode(this, 'param-code')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              코드 복사
+            </button>
+          </div>
+          <pre><code id="param-code">{
+  "model": "qwen2.5:32b", // 또는 사용하는 30B/8B 모델명
+  "messages": [
+    { "role": "system", "content": "You are a concise expert." },
+    { "role": "user", "content": "본문 작성 요청 프롬프트..." }
+  ],
+  "options": {
+    "temperature": 0.65,      // 0.65 유지 (너무 낮으면 반복에 취약)
+    "repeat_penalty": 1.18,   // 1.15 ~ 1.25 추천 (반복 단어 확률 벌점)
+    "repeat_last_n": 128,     // 최근 128단어를 기억하며 중복 감시
+    "top_p": 0.9,             // 상위 90% 확률 분포 내 샘플링
+    "stop": [                 // 할 말 끝났을 때 즉시 종료 마커
+      "###END###",
+      "\n\n\n\n",
+      "========================="
+    ]
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 4: Validation Gate Design Principles -->
+      <section id="gate-design">
+        <h2>4. 검수 게이트(Validation Gate) 4대 설계 원칙</h2>
+        <p class="section-desc">품질은 엄격하게 잡고, 허용 오차(Tolerance)는 유연하게 두는 실무 원칙입니다.</p>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-title" style="color: #c084fc;">1. 중복 문장 감지 &amp; 자동 정제</div>
+            <div class="step-desc">
+              동일한 문장이나 표현이 2회 이상 연속으로 감지되면 중복 구간을 잘라내거나(Truncate) 1개만 남겨 깔끔하게 마감합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-title" style="color: #38bdf8;">2. 분량 상한선 감시 (Overflow Gate)</div>
+            <div class="step-desc">
+              서비스 레이아웃을 깨뜨릴 수 있는 비정상적인 장문이나 성의 없는 단문을 감지하여 목표 분량 범위를 안정적으로 유지합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-title" style="color: #4ade80;">3. 목표 개수 ±1개 유연한 허용 (Tolerance)</div>
+            <div class="step-desc">
+              N개의 항목/단락을 요청했을 때 기계적으로 탈락시키지 않고, 문맥상 완성도가 높다면 ±1개의 오차는 자연스러운 흐름으로 인정합니다.
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-title" style="color: #f472b6;">4. 포맷 &amp; 특수문자 찌꺼기 정제</div>
+            <div class="step-desc">
+              AI가 출력한 마크다운 백틱(```), 이스케이프 문자, 깨진 태그 등 UI 가독성을 해치는 노이즈를 렌더링 전에 자동으로 세척합니다.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 5: Comparison Table -->
+      <section id="comparison">
+        <h2>5. 한눈에 보는 비유 요약 표</h2>
+        <p class="section-desc">핵심 파라미터와 기법의 일상 비유 매핑입니다.</p>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>항목 / 파라미터</th>
+                <th>권장 설정값</th>
+                <th>비유적 쉬운 설명</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>repeat_penalty</code></td>
+                <td><strong style="color: #f3f4f6;">1.18 (1.15~1.25)</strong></td>
+                <td>"방금 한 말 또 하면 벌점 주기"</td>
+              </tr>
+              <tr>
+                <td><code>repeat_last_n</code></td>
+                <td><strong style="color: #f3f4f6;">128 토큰</strong></td>
+                <td>"최근 128단어 기억하며 중복 감시하기"</td>
+              </tr>
+              <tr>
+                <td><code>temperature</code></td>
+                <td><strong style="color: #f3f4f6;">0.65</strong></td>
+                <td>"적당한 창의성과 표현의 유연함 열어두기"</td>
+              </tr>
+              <tr>
+                <td><code>stop</code></td>
+                <td><strong style="color: #f3f4f6;">["###END###"]</strong></td>
+                <td>"할 말 다 끝났으면 바로 펜 내려놓기"</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #a855f7;">Chunking (단계분할)</strong></td>
+                <td><strong style="color: #f3f4f6;">목차/챕터별 분할</strong></td>
+                <td>"책 한 권을 챕터별로 나누어 쓰기"</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #ec4899;">검수 게이트</strong></td>
+                <td><strong style="color: #f3f4f6;">유연한 허용 (Tolerance)</strong></td>
+                <td>"사후 품질을 든든하게 받쳐주는 안전 그물망"</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 6: FAQ -->
+      <section id="faq">
+        <h2>자주 묻는 질문 (FAQ)</h2>
+        <p class="section-desc">로컬 모델 구동 중 겪는 문제에 대한 추가 가이드입니다.</p>
+        
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">왜 30B 이상 고파라미터 모델에서 루프가 더 잘 생기나요?</button>
+          <div class="faq-content">
+            30B 이상 대형 모델을 로컬 환경(4-bit Q4_K_M 등)에서 돌릴 때 VRAM 한계로 낮은 Temperature(0.1 이하)를 사용하거나 양자화 압축으로 인해 주의집중(Attention) 가중치 손실이 생길 때 특정 토큰 선택 확률이 한쪽으로 극단적으로 쏠리기 때문입니다.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">e4b 같은 경량 모델에서도 repeat_penalty가 필요한가요?</button>
+          <div class="faq-content">
+            e4b 등 소형 모델은 포스트 분량이 짧으면 문장 반복은 적지만, 글자 수 제한 초과나 포스트 개수 누락 같은 '규칙 이탈'이 더 잦습니다. 따라서 파라미터 벌점과 함께 분량/포맷 검수 게이트를 함께 두는 것이 가장 안전합니다.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">파라미터 값을 올렸는데도 계속 반복하면 어떻게 하나요?</button>
+          <div class="faq-content">
+            한 번의 프롬프트에서 너무 많은 분량을 요구하고 있는지 점검해 보세요. 프롬프트를 [목차 생성 ➔ 섹션별 분할 호출] 형태로 쪼개면(Chunking) 모델이 기억해야 할 문맥이 줄어들어 루프가 즉각 해결됩니다.
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 <span style="color: var(--accent-color); font-weight: 600;">IZBLUE</span>. All rights reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    // Copy Code to Clipboard function
+    function copyCode(btn, codeId) {
+      const codeElement = document.getElementById(codeId);
+      const textToCopy = codeElement.innerText;
+      
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const originalHTML = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          복사 완료!
+        `;
+        
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = originalHTML;
+        }, 2000);
+      }).catch(err => {
+        console.error('클립보드 복사 실패:', err);
+      });
+    }
+
+    // Toggle FAQ accordion
+    function toggleFaq(button) {
+      const faqItem = button.parentElement;
+      const isActive = faqItem.classList.contains('active');
+      
+      document.querySelectorAll('.faq-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      
+      if (!isActive) {
+        faqItem.classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>
