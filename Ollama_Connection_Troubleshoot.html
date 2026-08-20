@@ -152,6 +152,14 @@
       word-break: keep-all;
     }
 
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+      margin-bottom: 24px;
+    }
+
     @media (max-width: 640px) {
       body {
         padding: 20px 12px;
@@ -162,6 +170,10 @@
       }
       header p {
         font-size: 0.92rem;
+      }
+      .specs-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px;
       }
       section {
         padding: 20px 14px;
@@ -489,7 +501,7 @@
       <p>최신 구글 크롬 브라우저의 PNA 보안 패치 및 macOS 부팅 시 발생하는 Ollama 환경 변수 누락 문제를 해결하는 전용 가이드입니다.</p>
 
       <!-- Quick Specs -->
-      <div class="specs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-top: 20px; margin-bottom: 24px;">
+      <div class="specs-grid">
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 8px; text-align: center;">
           <span style="font-size: 0.8rem; color: var(--secondary-text); display: block; margin-bottom: 4px;">소요 시간</span>
           <strong style="font-size: 1.1rem; color: var(--accent-color);">3분 이내</strong>
