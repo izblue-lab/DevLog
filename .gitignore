@@ -1,5 +1,0 @@
-# Ignore docs folder (contains markdown notes)
-docs/
-
-# Ignore OS metadata files
-.DS_Store
