@@ -508,8 +508,8 @@
 
       <!-- Section 2: 0.0.0.0 Day & Trojan -->
       <section id="section-2">
-        <h2>2. 그런데 왜 보안 문제가 생겼을까요? (0.0.0.0 Day)</h2>
-        <p class="section-desc">외부에서 대문을 부수는 대신, 집 안에 있는 '브라우저'를 속여 침투하는 트로이 목마 방식의 공격 원리입니다.</p>
+        <h2>2. 그런데 왜 보안 문제가 생겼을까요? (0.0.0.0 Day와 현재의 원인)</h2>
+        <p class="section-desc">과거 트로이 목마 방식의 0.0.0.0 Day 역사와, 최신 크롬에서 통신이 차단되는 현재의 진짜 원인입니다.</p>
 
         <div class="principle-box">
           <div class="principle-header">
@@ -523,10 +523,11 @@
 
         <div class="principle-box">
           <div class="principle-header">
-            <span>⚠️ 18년간 방치되었던 브라우저의 맹점 (0.0.0.0)</span>
+            <span>⚠️ 18년간 방치되었던 맹점(2024년)과 현재 통신 차단 원인</span>
           </div>
           <div class="principle-body">
-            기존 브라우저들은 <span class="badge-cyan">localhost</span>나 <span class="badge-cyan">127.0.0.1</span>로 보내는 위험한 요청은 일부 감시했지만, 모든 네트워크를 의미하는 와일드카드 주소인 <span class="badge-amber">0.0.0.0</span>은 검사 목록에서 빠져 있었습니다. <strong>2024년 8월 보안 연구진(Oligo Security)</strong>이 이 18년 된 허점을 밝혀내며 브라우저들의 0.0.0.0 전면 차단이 시작되었습니다.
+            과거에는 브라우저들이 와일드카드 주소인 <span class="badge-amber">0.0.0.0</span>을 검사하지 않는 허점이 있었으나 2024년 8월 이후 전면 차단되었습니다.<br><br>
+            <strong>지금 로컬 AI 연결이 먹통이 되는 진짜 이유:</strong> 2024년 사건 이후 구글 크롬은 사설망 보안을 대폭 강화하여 최신 <strong>LNA(Local Network Access)</strong> 규칙을 기본 도입했습니다. 이에 따라 외부 웹사이트(HTTPS)가 내 PC의 로컬 AI(`http://127.0.0.1:11434`)로 비보안 통신을 시도할 때, 브라우저가 사설망 무단 침투 및 Mixed Content 위험으로 판단하여 <strong>기본 통신을 차단(`ERR_FAILED`)</strong>하기 때문입니다.
           </div>
         </div>
       </section>
